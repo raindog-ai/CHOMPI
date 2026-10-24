@@ -1,6 +1,12 @@
 #pragma once
 #include "ui.h"
 #include "EngineBase.h"
+#ifdef CHOMPI_USB_AUDIO
+#include "usb/UsbAudioMidi.h"
+using ChompiMidiHandler = daisy::MidiHandler<chompi_usb::MidiTransport>;
+#else
+using ChompiMidiHandler = daisy::MidiUsbHandler;
+#endif
 
 class MidiManager {
     public:
@@ -34,14 +40,22 @@ class MidiManager {
         MidiUartTransport transport = uart_midi.GetMutableTransport();
         uart_handler_ = transport.GetUartHandle();
 
-        MidiUsbHandler::Config usb_midi_cfg;
+        ChompiMidiHandler::Config usb_midi_cfg;
+#ifndef CHOMPI_USB_AUDIO
         usb_midi_cfg.transport_config.periph = MidiUsbTransport::Config::EXTERNAL;
+#endif
         usb_midi.Init(usb_midi_cfg);
+#ifdef CHOMPI_USB_AUDIO
+        usb_midi.StartReceive();
+#endif
         usb_midi.Listen();
 
     }
 
     void ProcessMidiIn() {
+#ifdef CHOMPI_USB_AUDIO
+        chompi_usb::PollMidi();
+#endif
         daisy::MidiEvent event;
         while(GetMidi(event))
         {
@@ -348,7 +362,7 @@ class MidiManager {
     bool transport_in;
 
     MidiUartHandler uart_midi;
-    MidiUsbHandler usb_midi;
+    ChompiMidiHandler usb_midi;
     bool usb_midi_active = true;
     uint32_t last_reset;
 

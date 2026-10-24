@@ -232,6 +232,16 @@ USBD_StatusTypeDef  USBD_StdEPReq (USBD_HandleTypeDef *pdev , USBD_SetupReqTyped
   USBD_StatusTypeDef ret = USBD_OK;
   USBD_EndpointTypeDef   *pep;
   ep_addr  = LOBYTE(req->wIndex);
+#ifdef CHOMPI_USB_AUDIO
+  // Reject unknown endpoints before indexing the vendored 15-element arrays.
+  if(req->wIndex > 0xffU || (ep_addr != 0x00U && ep_addr != 0x80U &&
+     ep_addr != 0x01U && ep_addr != 0x81U && ep_addr != 0x02U &&
+     ep_addr != 0x82U && ep_addr != 0x83U))
+  {
+    USBD_CtlError(pdev, req);
+    return USBD_FAIL;
+  }
+#endif
 
   switch (req->bmRequest & USB_REQ_TYPE_MASK)
   {
@@ -460,6 +470,13 @@ static void USBD_GetDescriptor(USBD_HandleTypeDef *pdev ,
 
     default:
 #if (USBD_SUPPORT_USER_STRING == 1U)
+#ifdef CHOMPI_USB_AUDIO
+      if(pdev->pClass->GetUsrStrDescriptor == NULL)
+      {
+        USBD_CtlError(pdev, req);
+        return;
+      }
+#endif
       pbuf = pdev->pClass->GetUsrStrDescriptor(pdev, (req->wValue) , &len);
       break;
 #else

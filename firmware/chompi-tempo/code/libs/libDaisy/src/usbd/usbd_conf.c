@@ -29,6 +29,13 @@
 
 /* USER CODE END Includes */
 
+#ifdef CHOMPI_USB_AUDIO
+extern void ChompiUsbSuspend(void);
+extern void ChompiUsbResume(void);
+extern void ChompiUsbSofTick(uint32_t frameNumber);
+extern void ChompiUsbBusReset(void);
+#endif
+
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
@@ -257,6 +264,11 @@ static void PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
 void HAL_PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+#ifdef CHOMPI_USB_AUDIO
+    const uint32_t usbBase = (uint32_t)hpcd->Instance;
+    const USB_OTG_DeviceTypeDef *device = (USB_OTG_DeviceTypeDef *)(usbBase + USB_OTG_DEVICE_BASE);
+    ChompiUsbSofTick((device->DSTS & USB_OTG_DSTS_FNSOF) >> 8);
+#endif
     USBD_LL_SOF((USBD_HandleTypeDef *)hpcd->pData);
 }
 
@@ -289,6 +301,9 @@ void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
     USBD_LL_SetSpeed((USBD_HandleTypeDef *)hpcd->pData, speed);
 
     /* Reset Device. */
+#ifdef CHOMPI_USB_AUDIO
+    ChompiUsbBusReset();
+#endif
     USBD_LL_Reset((USBD_HandleTypeDef *)hpcd->pData);
 }
 
@@ -305,6 +320,9 @@ void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
     /* Inform USB library that core enters in suspend Mode. */
+#ifdef CHOMPI_USB_AUDIO
+    ChompiUsbSuspend();
+#endif
     USBD_LL_Suspend((USBD_HandleTypeDef *)hpcd->pData);
     __HAL_PCD_GATE_PHYCLOCK(hpcd);
     /* Enter in STOP mode. */
@@ -333,7 +351,11 @@ void HAL_PCD_ResumeCallback(PCD_HandleTypeDef *hpcd)
     /* USER CODE BEGIN 3 */
 
     /* USER CODE END 3 */
+    __HAL_PCD_UNGATE_PHYCLOCK(hpcd);
     USBD_LL_Resume((USBD_HandleTypeDef *)hpcd->pData);
+#ifdef CHOMPI_USB_AUDIO
+    ChompiUsbResume();
+#endif
 }
 
 /**
@@ -469,7 +491,11 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
         hpcd_USB_OTG_HS.Init.speed                   = PCD_SPEED_FULL;
         hpcd_USB_OTG_HS.Init.dma_enable              = DISABLE;
         hpcd_USB_OTG_HS.Init.phy_itface              = USB_OTG_EMBEDDED_PHY;
+#ifdef CHOMPI_USB_AUDIO
+        hpcd_USB_OTG_HS.Init.Sof_enable              = ENABLE;
+#else
         hpcd_USB_OTG_HS.Init.Sof_enable              = DISABLE;
+#endif
         hpcd_USB_OTG_HS.Init.low_power_enable        = DISABLE;
         hpcd_USB_OTG_HS.Init.lpm_enable              = DISABLE;
         hpcd_USB_OTG_HS.Init.battery_charging_enable = ENABLE;
@@ -507,9 +533,18 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
         HAL_PCD_RegisterIsoInIncpltCallback(&hpcd_USB_OTG_HS,
                                             PCD_ISOINIncompleteCallback);
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
+#ifdef CHOMPI_USB_AUDIO
+        // FIFO units are 32-bit words. 464/1024 total; each IN EP owns a FIFO.
+        HAL_PCDEx_SetRxFiFo(&hpcd_USB_OTG_HS, 256);
+        HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 0, 32);
+        HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 1, 32);  // MIDI IN
+        HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 2, 128); // stereo audio IN
+        HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 3, 16);  // feedback
+#else
         HAL_PCDEx_SetRxFiFo(&hpcd_USB_OTG_HS, 0x200);
         HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 0, 0x80);
         HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 1, 0x174);
+#endif
     }
     return USBD_OK;
 }

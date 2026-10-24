@@ -71,7 +71,7 @@ class fxEngine {
 
     }
 
-    void Process(const float *const *in, float **out, size_t size, float **chroma_buff, float **slice_buff) {
+    void Process(const float *const *in, float **out, size_t size, float **chroma_buff, float **slice_buff, bool usb_only = false) {
 
         float *outl = out[0];
         float *outr = out[1];
@@ -82,7 +82,7 @@ class fxEngine {
         std::fill(&dry_buffer_[0][0], &dry_buffer_[0][0] + 96, 0.f);
         std::fill(&wet_buffer_[0][0], &wet_buffer_[0][0] + 96, 0.f);
 
-        if(monitor_mode_ == 1) // Both
+        if(!usb_only && monitor_mode_ == 1) // Both
         {
             if(in_source == InputSource::MIC) {
                 ApplyMicMonitorPositionTwo(in, dryPtr, wetPtr, size, &monitor[0][0]);
@@ -91,7 +91,7 @@ class fxEngine {
                 ApplyLineMonitorPositionTwo(in, dryPtr, wetPtr, size, &monitor[0][0]);
             }
         }
-        else if (monitor_mode_ == 2 && input_monitor && in_source == InputSource::MIC)
+        else if (!usb_only && monitor_mode_ == 2 && input_monitor && in_source == InputSource::MIC)
         {
             ApplyMicMonitor(in, wetPtr, size, &monitor[0][0]);
         }
@@ -133,7 +133,7 @@ class fxEngine {
         std::copy(out[0], out[0] + size, out[2]); // Copy here after FX
         std::copy(out[1], out[1] + size, out[3]);
 
-        if (monitor_mode_ == 0 && input_monitor) {
+        if (!usb_only && monitor_mode_ == 0 && input_monitor) {
             if (in_source == InputSource::MIC) {
                 ApplyMicMonitor(in, out, size, &monitor[0][0]);
             }
@@ -141,11 +141,11 @@ class fxEngine {
                 ApplyLineMonitor(in, out, size, &monitor[0][0]);
             }
         }
-        else if (monitor_mode_ == 2) {
+        else if (!usb_only && monitor_mode_ == 2) {
             ApplyLineMonitor(in, out, size, &monitor[0][0]);
         }
 
-        if (in_source == InputSource::RESAMPLE) {
+        if (!usb_only && in_source == InputSource::RESAMPLE) {
             for (size_t i = 0; i < size; ++i) {
 
                 fonepole(resamp_env_, resamp_env_target_, .001f);
@@ -167,7 +167,7 @@ class fxEngine {
 
         ApplyEnvelopeFollower(size, &monitor[0][0]);
 
-        if (record) {
+        if (!usb_only && record) {
             for (size_t i = 0; i < size; i++)
             {
                 const int16_t inl = f2s16(monitor[0][i]);
