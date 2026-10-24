@@ -76,6 +76,13 @@ namespace chompi
             float r, g, b;
             uint32_t now = System::GetNow();
 
+            if (grid_toggle_held_ && now - grid_toggle_time_ >= 750) {
+                grid_toggle_held_ = false;
+                grid_toggle_fired_ = true;
+                daisy::ScopedIrqBlocker irq;
+                arpSeq_->toggleGrid();
+            }
+
             if(now - last_blink > 250)
             {
                 blink_state = !blink_state;
@@ -512,6 +519,9 @@ namespace chompi
                 SetSmtLedFloat(e, orange[0], orange[1], orange[2]);
             }
 
+            if (fx_->getEngine() == SLICE && static_cast<sliceEngine*>(engines_[SLICE])->grid.Enabled())
+                SetPthLedFloat(led_map[34], 0.f, .7f, 1.f);
+
             // ========   send the data   =========
             fill_led_data();
         }
@@ -893,7 +903,18 @@ namespace chompi
             break;
 
             case static_cast<uint16_t>(Hardware::SwId::KEY_28): { //Loop
-                if (rising) {
+                if (fx_->getEngine() == SLICE) {
+                    if (rising) {
+                        static_cast<sliceEngine*>(engines_[SLICE])->grid.shiftLoopOwned = true;
+                        grid_toggle_held_ = true;
+                        grid_toggle_fired_ = false;
+                        grid_toggle_time_ = System::GetNow();
+                    } else {
+                        static_cast<sliceEngine*>(engines_[SLICE])->grid.shiftLoopOwned = false;
+                        if (grid_toggle_held_ && !grid_toggle_fired_) arpSeq_->incrementRestMode();
+                        grid_toggle_held_ = false;
+                    }
+                } else if (rising) {
                     arpSeq_->incrementRestMode();
                 }
             }
@@ -1123,6 +1144,13 @@ namespace chompi
 
             return true;
         }
+
+        void OnFocusLost() override {
+            grid_toggle_held_ = false;
+        }
+
+        bool grid_toggle_held_ = false, grid_toggle_fired_ = false;
+        uint32_t grid_toggle_time_ = 0;
 
         void OnFocusGained() override
         {

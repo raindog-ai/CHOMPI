@@ -1,5 +1,9 @@
 # CHOMPI — Open Source
 
+## Raindog community firmware
+
+[Tempo Grid 16 / Trad-Seq](TEMPO-GRID.md) adds a switchable sixteen-step mute grid to TEMPO, with independent tempo stretching and 4-, 8-, or 16-beat sample spans. See the guide for controls, validation status and inherited save/copy limitations. The test binary is in [`releases/tempo-grid16-1.1`](releases/tempo-grid16-1.1). This fork is an unofficial community modification; the original CHOMPI files and notices follow below.
+
 **CHOMPI** is a quirky chromatic sampler and tape-music instrument by
 [CHOMPI Club](https://www.chompiclub.com).
 

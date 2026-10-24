@@ -80,9 +80,34 @@ class ArpeggiatorSequencer {
         transport_out_ = options->transport_type == 0 || options->transport_type == 1;
     }
 
+    void toggleGrid() {
+        stopEngineVoices(1);
+        auto* slice = static_cast<sliceEngine*>(engines_[1]);
+        for (auto& voice : slice->myVoices) {
+            voice.gate_ = voice.activeFromUser = voice.activeFromSequencer = false;
+        }
+        auto& grid = static_cast<sliceEngine*>(engines_[1])->grid;
+        grid.SetEnabled(!grid.Enabled());
+        grid.Restart();
+    }
+
+    bool gridEnabled() const { return static_cast<sliceEngine*>(engines_[1])->grid.Enabled(); }
+
     void checkAndPop() { //This is going to send extra STOPs but I think its ok
         for (size_t i = 0; i < kNumEngines; ++i) {
+            if (i == 1 && gridEnabled()) { clock_edge_[i] = false; continue; }
             if (clock_edge_[i]) {
+                if (notes[i].empty()) {
+                    if (just_swapped_sequence_[i]) {
+                        engines_[i]->request_fifo.PushBack(KeyRequest(KeyRequest::Type::STOP,
+                            tempNote[i].transpose_nn_, tempNote[i].key_, 127.f));
+                        hw_->queueMidiNote(midi_out_channel_[i], int(tempNote[i].transpose_nn_ + 60), 127, NoteOff);
+                        just_swapped_sequence_[i] = false;
+                    }
+                    clock_edge_[i] = false;
+                    continue;
+                }
+                if (curIdx[i] < 0 || size_t(curIdx[i]) >= notes[i].size()) curIdx[i] = 0;
                 if ((notes[i].size() > 0 && play_[i]) || just_swapped_sequence_[i]) { // Redundant check
                     if (restPatterns[rest_pattern_[i]][restIdx[i]]) {
                         pushKeyRequest(false, i);
@@ -93,7 +118,7 @@ class ArpeggiatorSequencer {
                             notes[i].erase(notes[i].begin() + curIdx[i]);
                         }
                         if (notes[i].size() > 0) {
-                            if ((i == 0) || (notes[i][curIdx[i]].key_ != 28) || (slice_key_mode_ != 3) || (!last_slice_played_)) {
+                            if ((i == 0) || (size_t(curIdx[i]) >= notes[i].size()) || (notes[i][curIdx[i]].key_ != 28) || (slice_key_mode_ != 3) || (!last_slice_played_)) {
                                 getNewIdx(false, i);
                                 getNewRestIdx(i);
                             }
@@ -118,7 +143,12 @@ class ArpeggiatorSequencer {
 
     void ProcessKeyRequests() {
         for (size_t i = 0; i < kNumEngines; ++i) {
+            if (i == 1 && gridEnabled()) { deferring_trig_[i] = false; continue; }
             if (deferring_trig_[i]) {
+                if (notes[i].empty() || size_t(curIdx[i]) >= notes[i].size()) {
+                    deferring_trig_[i] = false;
+                    continue;
+                }
                 defer_frames_[i]++;
                 if (defer_frames_[i] >= kMaxDeferFrames) {
                     if (i == 0) {
@@ -142,6 +172,7 @@ class ArpeggiatorSequencer {
         }
         if (!request_fifo.IsEmpty()) {
             KeyRequest req = request_fifo.PopFront();
+            if (engine_type_ == 1 && gridEnabled()) return;
             if (latch_[engine_type_]) {
                 //seq mode
                 if (req.type_ == KeyRequest::Type::START) {
@@ -215,6 +246,8 @@ class ArpeggiatorSequencer {
     }
 
     void pushKeyRequest(bool start, size_t i) {
+        if (i == 1 && gridEnabled()) return;
+        if (notes[i].empty() || curIdx[i] < 0 || size_t(curIdx[i]) >= notes[i].size()) return;
         if (start) {
             out_pitch_[i] = notes[i][curIdx[i]].transpose_nn_;
             if (i == 1) {
@@ -447,7 +480,9 @@ class ArpeggiatorSequencer {
     }
 
     bool checkNotePlaying(float req_nn_) {
-        if (req_nn_ == notes[engine_type_][curIdx[engine_type_]].transpose_nn_ && play_[engine_type_] && notes[engine_type_].size()) {
+        if (!notes[engine_type_].empty() && curIdx[engine_type_] >= 0
+            && size_t(curIdx[engine_type_]) < notes[engine_type_].size()
+            && req_nn_ == notes[engine_type_][curIdx[engine_type_]].transpose_nn_ && play_[engine_type_]) {
             return true;
         }
         return false;
@@ -591,12 +626,14 @@ class ArpeggiatorSequencer {
     void stopVoice(size_t eng) {
         if (eng == 2) {
             for (size_t i = 0; i < kNumEngines; ++i) {
+                if (notes[i].empty() || size_t(curIdx[i]) >= notes[i].size()) continue;
                 engines_[i]->request_fifo.PushBack(KeyRequest(KeyRequest::Type::STOP, 
                     0.f, notes[i][curIdx[i]].key_, 127.f));
                 hw_->queueMidiNote(midi_out_channel_[i], static_cast<int>(notes[i][curIdx[i]].transpose_nn_ + 60), 127, NoteOff);
             }
         }
         else {
+            if (notes[eng].empty() || size_t(curIdx[eng]) >= notes[eng].size()) return;
             engines_[eng]->request_fifo.PushBack(KeyRequest(KeyRequest::Type::STOP, 
                 0.f, notes[eng][curIdx[eng]].key_, 127.f));
             hw_->queueMidiNote(midi_out_channel_[eng], static_cast<int>(notes[eng][curIdx[eng]].transpose_nn_ + 60), 127, NoteOff);
@@ -608,7 +645,7 @@ class ArpeggiatorSequencer {
         if (engines_[engine_type_]->isKeyPlaying(key)) {
             led_on = true;
         }
-        if (play_[engine_type_]) {
+        if (play_[engine_type_] && !notes[engine_type_].empty()) {
             volatile size_t next_key = notes[engine_type_][peekNextNote()].key_;
             volatile size_t now = System::GetNow();
             if (key == next_key && now > note_end_time_) {
@@ -624,6 +661,7 @@ class ArpeggiatorSequencer {
         if (pattern_[engine_type_] > 4) {
             pattern_[engine_type_] = SEQUENCE;
         }
+        if (notes[engine_type_].empty()) return;
         if (old_pattern_ == SEQUENCE) {
             if (!just_changed_pattern_[engine_type_]) {
                 just_changed_pattern_[engine_type_] = true;
@@ -675,6 +713,7 @@ class ArpeggiatorSequencer {
     }
 
     bool isRestPlaying(size_t key) {
+        if (curIdx[1] < 0 || size_t(curIdx[1]) >= notes[1].size()) return false;
         for (size_t i = 0; i < notes[1].size(); ++i) {
             if (notes[1][curIdx[1]].key_ == key) {
                 return true;
@@ -707,6 +746,7 @@ class ArpeggiatorSequencer {
 
     void setSequence(size_t eng, std::vector<NoteInfo> *seq) {
         notes[eng] = *seq;
+        curIdx[eng] = 0;
     }
 
     std::vector<NoteInfo> *getSequence(size_t eng) {
@@ -907,7 +947,7 @@ class ArpeggiatorSequencer {
                 engines_[eng]->request_fifo.PushBack(KeyRequest(KeyRequest::Type::STOP, 
                     0.f, notes[eng][i].key_, 127.f));
 
-                hw_->queueMidiNote(midi_out_channel_[engine_type_], static_cast<int>(notes[engine_type_][i].transpose_nn_ + 60), 127, NoteOff);
+                hw_->queueMidiNote(midi_out_channel_[eng], static_cast<int>(notes[eng][i].transpose_nn_ + 60), 127, NoteOff);
             }
         }
     }
@@ -917,7 +957,7 @@ class ArpeggiatorSequencer {
             engines_[eng]->request_fifo.PushBack(KeyRequest(KeyRequest::Type::STOP, 
                 0.f, notes[eng][i].key_, 127.f));
 
-            hw_->queueMidiNote(midi_out_channel_[engine_type_], static_cast<int>(notes[engine_type_][i].transpose_nn_ + 60), 127, NoteOff);
+            hw_->queueMidiNote(midi_out_channel_[eng], static_cast<int>(notes[eng][i].transpose_nn_ + 60), 127, NoteOff);
         }
     }
 

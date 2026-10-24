@@ -121,6 +121,8 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
         arpSeq.setClockEdge(1);
     }
     cManager.checkIntervalExpired(2);
+    slice.PrepareGrid(arpSeq.getPlay(1) && !fx.getRecording(), cManager.getGridPulses(),
+                      cManager.getGridStepFrames(), cManager.getClockMode());
     arpSeq.Prepare();
     for (size_t i = 0; i < kNumEngines; ++i) {
         engines[i]->Prepare();

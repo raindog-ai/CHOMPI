@@ -1,6 +1,7 @@
 #pragma once
 #include "daisy.h"
 #include "daisysp.h"
+#include <atomic>
 
 using namespace daisy;
 using namespace daisysp;
@@ -121,7 +122,18 @@ class clockManager {
         }
     }
 
+    uint32_t getGridPulses() const {
+        return mode_ == FREE ? gridFreePulses_.load(std::memory_order_relaxed)
+                             : gridMidiPulses_.load(std::memory_order_relaxed);
+    }
+
+    float getGridStepFrames() const {
+        // TEMPO stores eighth-note BPM, twice the musical quarter-note BPM.
+        return mode_ == FREE ? 1440000.f / current_tempo : gridMidiPulseUs_ * .288f;
+    }
+
     void incrementCounters() {
+        gridFreePulses_.fetch_add(1, std::memory_order_relaxed);
         intervalCounter[0]++;
         intervalCounter[1]++;
         intervalCounter[2]++;
@@ -269,6 +281,17 @@ class clockManager {
     }
 
     void processMidiClock() {
+        const uint32_t gridNow = System::GetUs();
+        if (gridMidiSeen_) {
+            const uint32_t elapsed = gridNow - gridMidiLastUs_;
+            if (elapsed >= 2000 && elapsed <= 250000) {
+                gridMidiPulseUs_ = gridMidiMeasured_ ? gridMidiPulseUs_ + .2f * (float(elapsed) - gridMidiPulseUs_) : float(elapsed);
+                gridMidiMeasured_ = true;
+            }
+        }
+        gridMidiSeen_ = true;
+        gridMidiLastUs_ = gridNow;
+        gridMidiPulses_.fetch_add(1, std::memory_order_relaxed);
         // Exponential smoothing factor (0 < alpha <= 1)
         constexpr float alpha = 0.1f;
 
@@ -322,6 +345,10 @@ class clockManager {
     int mode_;
 
     private:
+    std::atomic<uint32_t> gridFreePulses_{0}, gridMidiPulses_{0};
+    uint32_t gridMidiLastUs_ = 0;
+    float gridMidiPulseUs_ = 15625.f;
+    bool gridMidiSeen_ = false, gridMidiMeasured_ = false;
     float calculatedInterval[2 + 1];
 
     size_t intervalCounter[2 + 1];

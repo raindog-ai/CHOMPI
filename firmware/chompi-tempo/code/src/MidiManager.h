@@ -55,6 +55,7 @@ class MidiManager {
                 }
                 else if (event.srt_type == daisy::SystemRealTimeType::Start) {
                     if (clock_manager_->getClockMode() == SYNC && transport_in) {
+                        static_cast<sliceEngine*>(engines_[1])->grid.Restart();
                         arpSeq_->setPlayTransport(true);
                         clock_manager_->setNow(0);
                         clock_manager_->setNow(1);

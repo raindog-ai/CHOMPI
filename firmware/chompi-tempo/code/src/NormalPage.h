@@ -260,6 +260,17 @@ namespace chompi
                 }
             }
 
+            auto& grid = static_cast<sliceEngine*>(engines_[SLICE])->grid;
+            if (fx_->getEngine() == SLICE && grid.Enabled()) {
+                ResetSmtLeds();
+                const int head = grid.Playhead();
+                for (int step = 0; step < 16; ++step) {
+                    const bool on = grid.Mask() & (1u << step);
+                    if (head == step) SetSmtLedFloat(led_map[tempo_grid::keys[step]], 1.f, on ? 1.f : .05f, on ? 1.f : .05f);
+                    else SetSmtLedFloat(led_map[tempo_grid::keys[step]], 0.f, on ? .45f : .015f, on ? .35f : .01f);
+                }
+            }
+
             // =========   encoders   =========
             for (int i = 0; i < 6; i++)
             {
@@ -484,6 +495,7 @@ namespace chompi
                 r = g = b = 0.f;
             }
 
+            if (fx_->getEngine() == SLICE && grid.Enabled()) { r = 0.f; g = .7f; b = 1.f; }
             SetPthLedFloat(led_map[34], r, g, b);
 
             // chompi key
@@ -529,6 +541,22 @@ namespace chompi
                 return false;
 
             bool rising = numberOfPresses == 1;
+            auto& grid = static_cast<sliceEngine*>(engines_[SLICE])->grid;
+            if (buttonID == static_cast<uint16_t>(Hardware::SwId::KEY_28) && !rising && grid.shiftLoopOwned) {
+                grid.shiftLoopOwned = false;
+                return true;
+            }
+            if (fx_->getEngine() == SLICE && grid.Enabled()) {
+                if (buttonID >= 7 && buttonID <= 31) {
+                    const int step = tempo_grid::StepForKey(buttonID);
+                    if (step >= 0 && rising && !isRetriggering) grid.ToggleStep(step);
+                    return true;
+                }
+                if (buttonID == static_cast<uint16_t>(Hardware::SwId::KEY_28)) {
+                    if (rising && !isRetriggering) grid.SetMask(grid.Mask() == 0xffff ? 0 : 0xffff);
+                    return true;
+                }
+            }
             switch (buttonID)
             {
             // NO CONNECT, SKIP THESE
