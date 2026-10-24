@@ -59,7 +59,11 @@ extern "C"
   */
 
 /*---------- -----------*/
+#ifdef CHOMPI_USB_AUDIO
+#define USBD_MAX_NUM_INTERFACES 5U
+#else
 #define USBD_MAX_NUM_INTERFACES 1U /**< & */
+#endif
 /*---------- -----------*/
 #define USBD_MAX_NUM_CONFIGURATION 1U /**< & */
 /*---------- -----------*/
@@ -67,11 +71,19 @@ extern "C"
 /*---------- -----------*/
 #define USBD_SUPPORT_USER_STRING 1U /**< & */
 /*---------- -----------*/
+#ifdef CHOMPI_USB_AUDIO
+#define USBD_DEBUG_LEVEL 0U // No printf from real-time USB interrupts.
+#else
 #define USBD_DEBUG_LEVEL 3U /**< & */
+#endif
 /*---------- -----------*/
 #define USBD_LPM_ENABLED 0U /**< & */
 /*---------- -----------*/
+#ifdef CHOMPI_USB_AUDIO
+#define USBD_SELF_POWERED 0U
+#else
 #define USBD_SELF_POWERED 1U /**< & */
+#endif
 
 /****************************************/
 /** FS and HS identification */

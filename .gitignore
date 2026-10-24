@@ -10,3 +10,8 @@ Icon?
 
 # Tempo Grid generated host tests, audio renders and build evidence
 /validation/
+
+# Separate composite USB build
+/firmware/chompi-tempo/code/src/build-usb/
+
+/tools/__pycache__/

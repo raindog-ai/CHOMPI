@@ -89,11 +89,17 @@ bool rainbow_done = false;
  *  Channel 4 - Master R
  */
 bool line_in_state;
+#ifdef CHOMPI_USB_AUDIO
+extern "C" void ChompiUsbAudioTiming(uint32_t us);
+#endif
 
 void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)
 {
     // meter.OnBlockStart();
     uint32_t point1 = System::GetUs();
+#ifdef CHOMPI_USB_AUDIO
+    chompi_usb::AudioInput(chromaBuffer[0], chromaBuffer[1], size);
+#endif
 
     for(size_t i = 0; i < size; i++) {
         out[0][i] = out[1][i] = out[2][i] = out[3][i] = 0.f;
@@ -105,6 +111,9 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
         ui.GenerateEvents();
         ui.DoEvents();
 
+#ifdef CHOMPI_USB_AUDIO
+        chompi_usb::AudioOutput(out[0], out[1], size);
+#endif
         return;
     }
 
@@ -149,6 +158,12 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
     if (testSDLoaded) {
 
+#ifdef CHOMPI_USB_AUDIO
+        // Dedicated USB-effects test build: no local voices, microphone, aux,
+        // resampling capture, or analog monitor signal enters the USB return.
+        std::fill(sliceBuffer[0], sliceBuffer[0] + size, 0.f);
+        std::fill(sliceBuffer[1], sliceBuffer[1] + size, 0.f);
+#else
         engines[0]->Process(in, chromaPtr, size);
         engines[1]->Process(in, slicePtr, size);
 
@@ -157,7 +172,12 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
             out[1][i] = chromaBuffer[1][i] + sliceBuffer[1][i];
         }
 
-        fx.Process(in, out, size, chromaPtr, slicePtr);
+#endif
+        fx.Process(in, out, size, chromaPtr, slicePtr
+#ifdef CHOMPI_USB_AUDIO
+                   , true
+#endif
+        );
         fx.ApplyOutputFX(in, out, size);
     }
     else {
@@ -167,7 +187,13 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
         }
     }
 
+#ifdef CHOMPI_USB_AUDIO
+    chompi_usb::AudioOutput(out[2], out[3], size);
+#endif
     testTimer = System::GetUs() - point1;
+#ifdef CHOMPI_USB_AUDIO
+    ChompiUsbAudioTiming(testTimer);
+#endif
 
     // meter.OnBlockEnd();
 }

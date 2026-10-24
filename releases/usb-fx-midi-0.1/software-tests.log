@@ -1,0 +1,13 @@
+PASS bounded queues, PCM clipping/nonfinite input, counter wrap
+PASS descriptors: UAC1 + MIDI, terminals, endpoints, rates, lengths, invalid strings
+PASS controls: independent alternate settings, fixed rate, invalid requests
+PASS MIDI: note/clock interleave, nonblocking transmit, malformed packets
+PASS simulated 0 ppm, 60000 ms, playback=1 capture=1: zero FIFO faults, every-frame IN
+PASS simulated 1000 ppm, 3600000 ms, playback=1 capture=1: zero FIFO faults, every-frame IN
+PASS simulated -1000 ppm, 3600000 ms, playback=1 capture=1: zero FIFO faults, every-frame IN
+PASS simulated 1000 ppm, 60000 ms, playback=0 capture=1: zero FIFO faults, every-frame IN
+PASS simulated -1000 ppm, 60000 ms, playback=1 capture=0: zero FIFO faults, every-frame IN
+PASS lifecycle: suspend silence, missed-frame recovery, reset, reconnect, disconnect
+ALL USB SOFTWARE TESTS PASSED; hardware behavior remains unverified.
+PASS production FX routing: stereo USB dry/wet + output FX; MIC/Aux/resample excluded in every monitor mode; legacy capture preserved
+8 recovery scenarios passed (normal IN/OUT, ownership, drain, suspend/resume, timeout, wrap, reset, MIDI).

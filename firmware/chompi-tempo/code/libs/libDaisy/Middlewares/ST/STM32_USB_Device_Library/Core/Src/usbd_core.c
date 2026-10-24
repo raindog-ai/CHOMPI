@@ -531,9 +531,16 @@ USBD_StatusTypeDef USBD_LL_SOF(USBD_HandleTypeDef  *pdev)
 USBD_StatusTypeDef USBD_LL_IsoINIncomplete(USBD_HandleTypeDef  *pdev, uint8_t epnum)
 {
   /* Prevent unused arguments compilation warning */
+#ifdef CHOMPI_USB_AUDIO
+  if(pdev->dev_state == USBD_STATE_CONFIGURED && pdev->pClass != NULL)
+  {
+    // Recovery uses per-endpoint SOF age; HAL epnum is not reliable here.
+    if(pdev->pClass->IsoINIncomplete != NULL) pdev->pClass->IsoINIncomplete(pdev, epnum);
+  }
+#else
   UNUSED(pdev);
   UNUSED(epnum);
-
+#endif
   return USBD_OK;
 }
 
