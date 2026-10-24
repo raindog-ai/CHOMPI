@@ -21,7 +21,7 @@ binary=PACKAGE/'firmware/CHOMPI_USB_FX_MIDI.bin'
 assert binary.stat().st_size==manifest['binary_bytes']<=manifest['sram_exec_limit']
 assert digest(binary)==manifest['binary_sha256']
 assert digest(PACKAGE/'rollback/CHOMPI_TEMPO_GRID16.bin')==manifest['rollback_sha256']
-with zipfile.ZipFile(PACKAGE.with_suffix('.zip')) as z:
+with zipfile.ZipFile(Path(str(PACKAGE)+'.zip')) as z:
     assert z.testzip() is None
     names={str(p.relative_to(PACKAGE.parent)) for p in PACKAGE.rglob('*') if p.is_file()}
     assert set(z.namelist())==names

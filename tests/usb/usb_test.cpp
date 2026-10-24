@@ -89,7 +89,12 @@ void Descriptors() {
         unsigned n=control[i],type=control[i+1]; assert(n>=2 && i+n<=control.size());
         const auto* p=control.data()+i;
         if(type==4) { iface=p[2];alt=p[3]; assert(iface<5 && alt<2 && !pairs[iface][alt]); pairs[iface][alt]=true; ++interfaces; }
-        if(type==0x24 && iface==0) acBytes+=n;
+        if(type==0x24 && iface==0) {
+            acBytes+=n;
+            if(p[2]==1) assert(n==10 && p[8]==1 && p[9]==2);
+            if(p[2]==2) {assert(n==12 && p[7]==2 && p[8]==3);assert((p[3]==1 && p[4]==1 && p[5]==1) || (p[3]==3 && p[4]==0x13 && p[5]==7));}
+            if(p[2]==3) assert((p[3]==2 && p[4]==3 && p[5]==6 && p[7]==1) || (p[3]==4 && p[4]==1 && p[5]==1 && p[7]==3));
+        }
         if(iface==4 && type!=4) midiBytes+=n;
         if(type==0x24 && p[2]==2 && (iface==1 || iface==2)) { assert(n==11 && p[4]==2 && p[5]==2 && p[6]==16 && p[7]==1); assert((p[8]|p[9]<<8|p[10]<<16)==48000); ++formats; }
         if(type==5) { unsigned ep=p[2]; unsigned bit=(ep&15)+((ep&128)?16:0); assert(!(endpointMask & (1u<<bit))); endpointMask |= 1u<<bit; if(ep==2) assert(p[3]==5 && p[4]==196 && p[8]==0x83); }

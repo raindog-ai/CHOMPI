@@ -95,7 +95,7 @@ def main():
     for folder in (PACKAGE,RELEASE):
         (folder/'build-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
         checksums(folder)
-    zip_path=PACKAGE.with_suffix('.zip')
+    zip_path=Path(str(PACKAGE)+'.zip')
     with zipfile.ZipFile(zip_path,'w',zipfile.ZIP_DEFLATED) as z:
         for p in sorted(PACKAGE.rglob('*')):
             if p.is_file():z.write(p,str(p.relative_to(PACKAGE.parent)))
