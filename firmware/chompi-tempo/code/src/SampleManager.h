@@ -226,6 +226,11 @@ class sampleManager {
         }
     }
 
+    const char* getSampleName(size_t slot, size_t engine) const {
+        if (slot >= 14 || engine >= 2) return ""; // live buffer has no length tag
+        return loadedSamples[engine][slot].name.c_str();
+    }
+
     size_t getNextSampleSize(size_t slot, size_t engine) {
         if (slot == 14) {
             return loadedSamples[0][14].numSamples / 4;

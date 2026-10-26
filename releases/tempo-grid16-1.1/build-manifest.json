@@ -1,0 +1,22 @@
+{
+  "name": "Tempo Grid 16",
+  "version": "1.1-hardware-test",
+  "upstream": "https://github.com/CHOMPI-Club/CHOMPI",
+  "upstream_commit": "a73d732613da684e4de844619b690776f0f50ccf",
+  "source_commit": "9b0379a212ebb45bc3c204702765d2511bfd8c7e",
+  "compiler": "Arm GNU Toolchain 13.3.Rel1, GCC 13.3.1",
+  "target": "CHOMPI / STM32H750 Daisy Seed / BOOT_SRAM",
+  "binary_bytes": 266396,
+  "execution_region_bytes": 288768,
+  "stack_pointer": "0x20020000",
+  "reset_vector": "0x2400174d",
+  "hardware_tested": false,
+  "hardware_smoke_test": "Owner reported boot and Think loop/Grid playback working; full acceptance and CPU measurements remain incomplete.",
+  "dependencies": "Official vendored Tempo libDaisy/DaisySP archives",
+  "dependency_sha256": {
+    "firmware/chompi-tempo/code/libs/libDaisy/build/libdaisy.a": "7ca3868d707f440a1d5b759012158e20f847288f5d650a25f8f0fd206166062b",
+    "firmware/chompi-tempo/code/libs/DaisySP/build/libdaisysp.a": "e6ea7e329ea8856eda90797ac08d3105ad2eb7819544aa26f84ba5c24de836cd"
+  },
+  "firmware_sha256": "e77609c8ef9fa0f50e72ba6bc6ec7ae817a4315a629f376f42218aeb66993b44",
+  "rollback_sha256": "9d21f115f8c27a42a0309af3d952d7c5ce380377e520a3f8e16304a6d99801a3"
+}

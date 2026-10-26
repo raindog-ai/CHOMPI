@@ -7,3 +7,6 @@ Icon?
 # Editor state
 .cortex-debug.*.state.json
 .vs/
+
+# Tempo Grid generated host tests, audio renders and build evidence
+/validation/

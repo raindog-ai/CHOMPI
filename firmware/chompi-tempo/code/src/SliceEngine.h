@@ -3,6 +3,8 @@
 #include "daisysp.h"
 #include "SampleManager.h"
 #include "hardware.h"
+#include "StepGrid.h"
+#include "util/scopedirqblocker.h"
 
 struct SliceInfo {
     void *start;
@@ -30,6 +32,9 @@ class sliceVoice {
         amp_env_.SetReleaseTime(.005f);
 
         sustain = true;
+        gate_ = activeFromUser = activeFromSequencer = false;
+        prioroty = 0;
+        nn = 0.f;
     }
 
     void setFrequency(float freq) {
@@ -45,8 +50,9 @@ class sliceVoice {
         if (!sustain && amp_env_.GetCurrentSegment() == daisysp::ADSR_SEG_DECAY) {
             gate_ = false;
         }
-        *sigl += l * amp_env_.Process(gate_);
-        *sigr += r * amp_env_.Process(gate_);
+        const float envelope = amp_env_.Process(gate_);
+        *sigl += l * envelope;
+        *sigr += r * envelope;
     }
 
     void setStartEnd(void *st, size_t ns){
@@ -72,6 +78,11 @@ class sliceEngine : public BaseEngine {
     ~sliceEngine() {}
 
     sliceVoice myVoices[NUM_VOICES];
+    tempo_grid::StepGrid grid;
+
+    void PrepareGrid(bool playing, uint32_t pulses, float frames, int mode) {
+        grid.Prepare(playing, pulses, frames, mode, global_pitch_, reverse);
+    }
 
     void Init(sampleManager *sample_manager, float sample_rate) override {
         osc.Init(sample_rate);
@@ -106,6 +117,7 @@ class sliceEngine : public BaseEngine {
 
         for (size_t i = 0; i < NUM_VOICES; ++i) {
             myVoices[i].Init(sample_rate);
+            myVoices[i].prioroty = i + 1;
         }
     }
 
@@ -117,8 +129,11 @@ class sliceEngine : public BaseEngine {
             fonepole(pan_, pan_target_, .001f);
             float sigl = 0.f;
             float sigr = 0.f;
-            for (size_t voice = 0; voice < NUM_VOICES; ++voice) {
-                myVoices[voice].Process(&sigl, &sigr);
+            if (grid.Enabled()) {
+                for (auto& voice : myVoices) voice.amp_env_.Process(false);
+                grid.Process(sigl, sigr);
+            } else {
+                for (auto& voice : myVoices) voice.Process(&sigl, &sigr);
             }
             float pan_l = (1.f - pan_) * 2.f;
             float pan_r = pan_ * 2.f;
@@ -156,6 +171,7 @@ class sliceEngine : public BaseEngine {
         while (!request_fifo.IsEmpty())
         {
             KeyRequest req = request_fifo.PopFront();
+            if (grid.Enabled()) continue; // grid owns slice playback, including MIDI notes
             
             if (req.key_ < 0 || req.key_ > 31) {
                 continue;
@@ -404,11 +420,13 @@ class sliceEngine : public BaseEngine {
     }
 
     void setSample(size_t slot) override {
+        daisy::ScopedIrqBlocker irq;
 
         void *st = sample_manager_->getNextSample(slot, 1);
 
         sample_start_ = st;
         sample_bytes_ = sample_manager_->getNextSampleSize(slot, 1);
+        grid.SetLoopBeats(tempo_grid::LoopBeatsFromName(sample_manager_->getSampleName(slot, 1)));
         window_start_ = 0;
         window_end_ = sample_bytes_;
 
@@ -453,11 +471,15 @@ class sliceEngine : public BaseEngine {
     }
 
     void setStartPoint(float amount) override {
+        daisy::ScopedIrqBlocker irq;
+        amount = fclamp(amount, 0.f, 1.f);
         window_start_ = static_cast<size_t>(amount * sample_bytes_);
         updateSlices();
     }
 
     void setEndPoint(float amount) override {
+        daisy::ScopedIrqBlocker irq;
+        amount = fclamp(amount, 0.f, 1.f);
         window_end_ = static_cast<size_t>(amount * sample_bytes_);
         updateSlices();
     }
@@ -565,20 +587,25 @@ class sliceEngine : public BaseEngine {
     }
 
     void updateStartEnd(float start, float end) {
+        daisy::ScopedIrqBlocker irq;
+        start = fclamp(start, 0.f, 1.f);
+        end = fclamp(end, 0.f, 1.f);
         window_start_ = static_cast<size_t>(start * sample_bytes_);
         window_end_ = static_cast<size_t>(end * sample_bytes_);
         updateSlices();
     }
 
     void updateSlices() {
-        size_t cur_sample_size_ = window_end_ - window_start_;
+        grid.SetSample(static_cast<const int16_t*>(sample_start_), sample_bytes_, window_start_, window_end_);
+        size_t cur_sample_size_ = window_end_ > window_start_ ? window_end_ - window_start_ : 0;
         size_t slice_size_ = cur_sample_size_ / kMaxSlices;
 
         for (size_t i = 0; i < kMaxSlices; ++i) {
-            mySlices[i].start = sample_start_ + (window_start_ + i * slice_size_) * 4;
+            mySlices[i].start = sample_start_ ? static_cast<int16_t*>(sample_start_) + (window_start_ + i * slice_size_) * 2 : nullptr;
             mySlices[i].numSamples = slice_size_;
         }
         for (size_t i = 0; i < NUM_VOICES; ++i) {
+            if (myVoices[i].key < 0 || myVoices[i].key >= 32 || sliceMap[myVoices[i].key] >= kMaxSlices) continue;
             if (myVoices[i].key == 28) {
                 void *t1 = last_key_tog_ ? mySlices[15].start : mySlices[14].start;
                 size_t t2 = last_key_tog_ ? mySlices[15].numSamples : mySlices[14].numSamples;
