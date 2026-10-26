@@ -1,0 +1,3 @@
+PASS: mapping, 16-step wrap, mute/rest timing, transport/restart, clock wrap/mode, stereo isolation, live edits, clock loss, invalid/tiny windows, 2000 randomized windows
+PASS: actual Tempo sequencer empty transport/LEDs, grid bypass, preserved pattern and normal-mode restoration
+PASS: actual firmware clock, internal 80/160/240 BPM, independent counters, external 120 BPM and missing-clock rejection

@@ -1,0 +1,50 @@
+[
+  {
+    "frames_per_step": 3000,
+    "duration_seconds": 1.0,
+    "channels": [
+      {
+        "expected_hz": 440,
+        "peak_hz": 448.0,
+        "rms": 0.42656561732292175
+      },
+      {
+        "expected_hz": 660,
+        "peak_hz": 664.0,
+        "rms": 0.3202022612094879
+      }
+    ]
+  },
+  {
+    "frames_per_step": 6000,
+    "duration_seconds": 2.0,
+    "channels": [
+      {
+        "expected_hz": 440,
+        "peak_hz": 440.0,
+        "rms": 0.4290677309036255
+      },
+      {
+        "expected_hz": 660,
+        "peak_hz": 660.0,
+        "rms": 0.3219843804836273
+      }
+    ]
+  },
+  {
+    "frames_per_step": 12000,
+    "duration_seconds": 4.0,
+    "channels": [
+      {
+        "expected_hz": 440,
+        "peak_hz": 440.0,
+        "rms": 0.4303036630153656
+      },
+      {
+        "expected_hz": 660,
+        "peak_hz": 658.0,
+        "rms": 0.3227996230125427
+      }
+    ]
+  }
+]

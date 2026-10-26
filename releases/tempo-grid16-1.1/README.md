@@ -1,5 +1,7 @@
 # Tempo Grid 16 / Trad-Seq 1.1 — hardware test build
 
+**Update, 2026-10-26:** continuous crackling has been reported with this version. [Version 1.2](../tempo-grid16-1.2) addresses a burst of alignment-search work and awaits hardware confirmation. The 1.1 binary here is retained unchanged for reproducibility.
+
 A switchable sixteen-step sequencer for CHOMPI TEMPO. See [the complete controls, installation and limitations guide](../../TEMPO-GRID.md).
 
 ## Install on an existing Tempo card
