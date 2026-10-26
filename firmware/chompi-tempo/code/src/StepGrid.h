@@ -8,6 +8,11 @@
 #include <cstdint>
 #include <algorithm>
 
+// Host-only work counter; no counter or branch in production firmware.
+#ifndef TEMPO_GRID_MATCH_PROBE
+#define TEMPO_GRID_MATCH_PROBE() ((void)0)
+#endif
+
 namespace tempo_grid {
 // Optional filename token, e.g. slice_a1_b16_amen.wav. Legacy files use 4 beats.
 inline unsigned LoopBeatsFromName(const char* name) {
@@ -106,9 +111,13 @@ class StepGrid {
                 auto& grain = grains_[n];
                 if (grain.age >= kGrain) {
                     grain.age = 0;
-                    Grain reference = grains_[n ^ 1];
-                    if (n == 1 && reference.age) --reference.age;
-                    grain.origin = AlignedOrigin(float(age_) * scan, reference);
+                    // Search was spread over the preceding hop. Never perform
+                    // a whole WSOLA search in this 24-frame audio callback.
+                    const bool ready = searchIndex_ == kSearchCandidates
+                        && searchPitch_ == pitch_ && searchReverse_ == reverse_
+                        && searchDuration_ == duration_;
+                    grain.origin = ready ? searchBest_ : float(age_) * scan;
+                    StartSearch(float(age_ + kHop) * scan, {kHop, grain.origin});
                 }
                 // Complementary triangular windows, 50% overlap.
                 const float w = grain.age < kHop ? float(grain.age) / kHop
@@ -125,6 +134,7 @@ class StepGrid {
                 right += (pcm_[a+1] + (float(pcm_[b+1]) - pcm_[a+1]) * frac) * w / 32768.f;
                 ++grain.age;
             }
+            SearchTick();
             float edge = std::min(1.f, std::min(float(age_) / 48.f, (duration_ - age_) / 48.f));
             const float target = (Mask() & (1u << step_)) ? 1.f : 0.f;
             gain_ += std::max(-1.f/48.f, std::min(target - gain_, 1.f/48.f));
@@ -144,41 +154,54 @@ class StepGrid {
 
   private:
     struct Grain { unsigned age; float origin; };
-    size_t ReadIndex(float pos) const {
+    size_t ReadIndex(float pos, bool reverse) const {
         int index = int(pos) % int(count_);
         if (index < 0) index += int(count_);
-        if (reverse_) index = int(count_ - 1) - index;
+        if (reverse) index = int(count_ - 1) - index;
         return 2 * (offset_ + size_t(index));
     }
     float MatchCost(float candidate, const Grain& other) const {
+        TEMPO_GRID_MATCH_PROBE();
         float cost = 0.f;
         // Compare both channels with the continuing grain over the overlap.
         // This waveform alignment prevents regular grain resets shifting pitch.
         for (unsigned t = 0; t < kHop; t += 20) {
-            const size_t a = ReadIndex(candidate + float(t) * pitch_);
-            const size_t b = ReadIndex(other.origin + float(other.age + t) * pitch_);
+            const size_t a = ReadIndex(candidate + float(t) * searchPitch_, searchReverse_);
+            const size_t b = ReadIndex(other.origin + float(other.age + t) * searchPitch_, searchReverse_);
             const float dl = float(pcm_[a]) - pcm_[b];
             const float dr = float(pcm_[a+1]) - pcm_[b+1];
             cost += dl * dl + dr * dr;
         }
         return cost;
     }
-    float AlignedOrigin(float nominal, const Grain& other) const {
-        // WSOLA search: at most 10 ms either side, coarse then sample refinement.
-        // Fixed work and storage; runs once per 480 output frames, not per sample.
-        float best = nominal, cost = MatchCost(nominal, other);
-        for (int delta = -480; delta <= 480; delta += 8) {
-            const float candidate = nominal + delta;
-            const float c = MatchCost(candidate, other);
-            if (c < cost) { cost = c; best = candidate; }
+    void StartSearch(float nominal, Grain reference) {
+        searchNominal_ = searchBest_ = searchCoarse_ = nominal;
+        searchCost_ = INFINITY;
+        searchReference_ = reference;
+        searchPitch_ = pitch_;
+        searchReverse_ = reverse_;
+        searchDuration_ = duration_;
+        searchIndex_ = 0;
+        // Leave searchCountdown_ alone: step/grain restarts cannot introduce
+        // extra search work into a callback that straddles the boundary.
+    }
+    void SearchTick() {
+        if (searchCountdown_) { --searchCountdown_; return; }
+        searchCountdown_ = 2;
+        if (searchIndex_ >= kSearchCandidates) return;
+        // Same ordered coarse/refinement candidates as 1.1, one every three
+        // samples: <=8 MatchCost calls per 24-frame block, previously 137.
+        // All 137 candidates finish in <=411 frames, before the 480-frame hop.
+        float candidate = searchNominal_;
+        if (searchIndex_ >= 1 && searchIndex_ <= 121)
+            candidate += -480.f + float(searchIndex_ - 1) * 8.f;
+        else if (searchIndex_ >= 122) {
+            if (searchIndex_ == 122) searchCoarse_ = searchBest_;
+            candidate = searchCoarse_ + float(int(searchIndex_) - 129);
         }
-        const float coarse = best;
-        for (int delta = -7; delta <= 7; ++delta) {
-            const float candidate = coarse + delta;
-            const float c = MatchCost(candidate, other);
-            if (c < cost) { cost = c; best = candidate; }
-        }
-        return best;
+        const float cost = MatchCost(candidate, searchReference_);
+        if (cost < searchCost_) { searchCost_ = cost; searchBest_ = candidate; }
+        ++searchIndex_;
     }
     void BeginStep(unsigned step) {
         step_ = step;
@@ -191,8 +214,15 @@ class StepGrid {
         gain_ = (Mask() & (1u << step)) ? 1.f : 0.f;
         grains_[0] = {0, 0.f};
         grains_[1] = {kHop, -float(kHop) * pitch_};
+        StartSearch(float(kHop) * (float(count_) / duration_), {kHop, 0.f});
     }
     static constexpr unsigned kGrain = 960, kHop = kGrain / 2;
+    static constexpr unsigned kSearchCandidates = 137;
+    Grain searchReference_ = {};
+    float searchNominal_ = 0.f, searchBest_ = 0.f, searchCoarse_ = 0.f;
+    float searchCost_ = 0.f, searchPitch_ = 1.f, searchDuration_ = 4500.f;
+    bool searchReverse_ = false;
+    unsigned searchIndex_ = kSearchCandidates, searchCountdown_ = 0;
     Grain grains_[2] = {};
     std::atomic<uint32_t> enabled_{0}, mask_{0xffff}, restart_{0};
     std::atomic<uint32_t> loopBeats_{4};

@@ -2,7 +2,7 @@
 from pathlib import Path
 import hashlib, json, subprocess, tempfile, zipfile
 root=Path(__file__).resolve().parents[1]
-release=root.parent/'CHOMPI-Tempo-Grid16-1.1-test'
+release=root.parent/'CHOMPI-Tempo-Grid16-1.2-test'
 manifest=json.loads((release/'build-manifest.json').read_text())
 upstream=manifest['upstream_commit']
 for line in (release/'SHA256SUMS.txt').read_text().splitlines():

@@ -2,7 +2,24 @@
 
 A switchable modification of CHOMPI TEMPO 1.0, based on the official open-source release at commit `a73d732613da684e4de844619b690776f0f50ccf`.
 
-**Status:** compiled for the Daisy Seed / CHOMPI BOOT_SRAM target with Arm GNU Toolchain 13.3.rel1. Software tests pass. The owner reports successful boot and playback of the Think loop with Grid enabled on a physical CHOMPI. This is a limited smoke test: audio CPU headroom, the complete control matrix and MIDI I/O still need the hardware acceptance test below. It is a community modification, not an official CHOMPI release.
+**Status:** Version 1.2 is a hardware-test candidate for the Daisy Seed / CHOMPI BOOT_SRAM target with Arm GNU Toolchain 13.3.rel1. Version 1.1 boots and plays, but the owner reports continuous crackling. Version 1.2 addresses a large burst of stretching work in the audio callback. Software tests pass; removal of the audible crackling and actual processor headroom remain unverified on hardware. It is a community modification, not an official CHOMPI release.
+
+## Version 1.2: continuous-crackle investigation
+
+CHOMPI processes 24 frames per callback at 48 kHz: a 500 microsecond deadline. Version 1.1 performs 137 waveform-alignment candidate comparisons at a grain boundary, every 480 frames (10 milliseconds). Each candidate checks 24 stereo positions. That concentrates 3,288 stereo comparisons into one audio callback, in addition to both engines and effects. A missed deadline is a credible cause of regular crackling, but no on-device timing capture has yet proved it is the sole cause of this report.
+
+Version 1.2 searches ahead, evaluating one candidate every three output frames, and consumes the completed result at the next grain boundary. All candidates finish within 411 frames, before the 480-frame deadline. The busiest 24-frame block now has at most eight candidates (192 stereo comparisons), including blocks crossing step boundaries. It retains the same candidate order and stereo alignment; 150 fixed-control combinations across beat spans, pitch, reverse, and tempo render sample-for-sample identically to 1.1 in host tests. Live pitch, reverse or tempo changes invalidate a pending result and use the nominal grain position for that hop; the next search uses the new settings. No allocation, locks, SD I/O, or whole-search fallback is added to the audio callback.
+
+### Test this candidate
+
+Use the **firmware-only** update below so your current drum chops and settings stay in place. Do not copy the supplied factory `sd-card` profile onto your existing sound bank. Keep the existing card backup and old binary on your computer.
+
+1. Start with the same Think loop, tempo, output connection and listening level that crackled in 1.1. Listen to 1.2 with Grid disabled, then enable Grid with all steps on. Compare at a comfortable low level.
+2. Try several muted steps, 80/160/240 BPM, forward/reverse and pitch changes. Compare a 4-, 8- and 16-beat loop. Listen for continuous crackle separately from occasional step-transition clicks.
+3. Repeat with the chromatic engine and effects active. Those share the callback budget. If crackle appears only under that load, note the settings.
+4. If crackling persists, disable Grid again. Report whether it remains in ordinary Tempo mode and whether lowering output level changes it. A short recording is useful if available. The included `rollback/CHOMPI_TEMPOv1_0.bin` is the exact official Tempo fallback, installed using the same one-bin update process.
+
+The target's existing debugger-visible `testTimer` stores the most recent callback duration in microseconds. A full hardware qualification must measure worst-case callback time across grain/step boundaries and effects load, not just that last value or average CPU usage. Host work-count tests prove a scheduling bound, not an STM32 execution-time bound.
 
 ## What it does
 
